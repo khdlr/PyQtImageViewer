@@ -16,6 +16,7 @@ except ImportError:
         raise ImportError("ViewGeoTIFF: Requires PyQt5 or PyQt4.")
 import rasterio
 import numpy as np
+from pathlib import Path
 
 __author__ = "Konrad Heidler <k.heidler@tum.de>, Marcel Goldschen-Ohm <marcel.goldschen@gmail.com>"
 __version__ = '0.1.0'
@@ -78,6 +79,10 @@ class ViewGeoTIFF(QGraphicsView):
         self.canZoom = True
         self.canPan = True
 
+        # Path of current file
+        self.currentFile = None
+
+
     def hasImage(self):
         """ Returns whether or not the scene contains an image pixmap.
         """
@@ -124,18 +129,23 @@ class ViewGeoTIFF(QGraphicsView):
         self.setSceneRect(QRectF(pixmap.rect()))  # Set scene size to image size.
         self.updateViewer()
 
-    def loadImageFromFile(self, fileName=""):
+    def loadImageFromFile(self, fileName=None):
         """ Load an image from file.
         Without any arguments, loadImageFromFile() will popup a file dialog to choose the image file.
         With a fileName argument, loadImageFromFile(fileName) will attempt to load the specified image file directly.
         """
-        if len(fileName) == 0:
+        if fileName is None:
             if QT_VERSION_STR[0] == '4':
                 fileName = QFileDialog.getOpenFileName(self, "Open image file.")
             elif QT_VERSION_STR[0] == '5':
-                fileName, dummy = QFileDialog.getOpenFileName(self, "Open image file.")
-        if len(fileName) and os.path.isfile(fileName):
-            with rasterio.open(fileName) as raster:
+                fileName, _ = QFileDialog.getOpenFileName(self, "Open image file.")
+        self.currentFile = Path(fileName)
+        self.updateFolderListing()
+        self.loadImage()
+
+    def loadImage(self):
+        if self.currentFile.exists():
+            with rasterio.open(self.currentFile) as raster:
                 r = raster.read(4)
                 g = raster.read(3)
                 b = raster.read(2)
@@ -147,6 +157,14 @@ class ViewGeoTIFF(QGraphicsView):
             image = QImage(img, width, height, 3*width, QImage.Format_RGB888)
 
             self.setImage(image)
+            self.setWindowTitle(f'{self.currentFile.name} ({self.folderIndex+1} / {len(self.folderListing)})')
+        else:
+            print(f"Trying to load Image at {self.currentFile}, which doesn't exist!")
+
+
+    def updateFolderListing(self):
+        self.folderListing = list(sorted(self.currentFile.parent.glob('*.tif')))
+        self.folderIndex = self.folderListing.index(self.currentFile)
 
     def updateViewer(self):
         """ Show current zoom (if showing entire image, apply current aspect ratio mode).
@@ -213,6 +231,24 @@ class ViewGeoTIFF(QGraphicsView):
     def closeEvent(self, event):
         self.app.quit()
 
+    def nextImage(self):
+        self.folderIndex = (self.folderIndex + 1) % len(self.folderListing)
+        self.currentFile = self.folderListing[self.folderIndex]
+        self.loadImage()
+
+    def previousImage(self):
+        self.folderIndex -= 1
+        if self.folderIndex < 0:
+            self.folderIndex += len(self.folderListing)
+        self.currentFile = self.folderListing[self.folderIndex]
+        self.loadImage()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Right:
+            self.nextImage()
+        elif event.key() == Qt.Key_Left:
+            self.previousImage()
+        event.accept()
 
 
 if __name__ == '__main__':
@@ -220,6 +256,7 @@ if __name__ == '__main__':
     try:
         from PyQt5.QtWidgets import QApplication
     except ImportError:
+
         try:
             from PyQt4.QtGui import QApplication
         except ImportError:
@@ -236,8 +273,12 @@ if __name__ == '__main__':
 
     # Create image viewer and load an image file to display.
     viewer = ViewGeoTIFF(app)
-    viewer.loadImageFromFile()  # Pops up file dialog.
 
+    filename = None
+    if len(sys.argv) > 1:
+        filename = sys.argv[1]
+
+    viewer.loadImageFromFile(filename)
     # Handle left mouse clicks with custom slot.
     viewer.leftMouseButtonPressed.connect(handleLeftClick)
 

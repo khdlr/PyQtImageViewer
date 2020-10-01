@@ -1,4 +1,5 @@
-""" QtImageViewer.py: PyQt image viewer widget for a QPixmap in a QGraphicsView scene with mouse zooming and panning.
+#!/usr/bin/env python
+""" ViewGeoTIFF.py: PyQt image viewer widget for a QPixmap in a QGraphicsView scene with mouse zooming and panning.
 
 """
 
@@ -12,14 +13,15 @@ except ImportError:
         from PyQt4.QtCore import Qt, QRectF, pyqtSignal, QT_VERSION_STR
         from PyQt4.QtGui import QGraphicsView, QGraphicsScene, QImage, QPixmap, QPainterPath, QFileDialog
     except ImportError:
-        raise ImportError("QtImageViewer: Requires PyQt5 or PyQt4.")
+        raise ImportError("ViewGeoTIFF: Requires PyQt5 or PyQt4.")
+import rasterio
+import numpy as np
+
+__author__ = "Konrad Heidler <k.heidler@tum.de>, Marcel Goldschen-Ohm <marcel.goldschen@gmail.com>"
+__version__ = '0.1.0'
 
 
-__author__ = "Marcel Goldschen-Ohm <marcel.goldschen@gmail.com>"
-__version__ = '0.9.0'
-
-
-class QtImageViewer(QGraphicsView):
+class ViewGeoTIFF(QGraphicsView):
     """ PyQt image viewer widget for a QPixmap in a QGraphicsView scene with mouse zooming and panning.
 
     Displays a QImage or QPixmap (QImage is internally converted to a QPixmap).
@@ -132,7 +134,17 @@ class QtImageViewer(QGraphicsView):
             elif QT_VERSION_STR[0] == '5':
                 fileName, dummy = QFileDialog.getOpenFileName(self, "Open image file.")
         if len(fileName) and os.path.isfile(fileName):
-            image = QImage(fileName)
+            with rasterio.open(fileName) as raster:
+                r = raster.read(4)
+                g = raster.read(3)
+                b = raster.read(2)
+
+            img = np.stack([r, g, b], axis=-1)
+            img = (255 * np.clip(img / 3000, 0, 1)).astype(np.uint8)
+
+            height, width = img.shape[:2]
+            image = QImage(img, width, height, 3*width, QImage.Format_RGB888)
+
             self.setImage(image)
 
     def updateViewer(self):
@@ -206,7 +218,7 @@ if __name__ == '__main__':
         try:
             from PyQt4.QtGui import QApplication
         except ImportError:
-            raise ImportError("QtImageViewer: Requires PyQt5 or PyQt4.")
+            raise ImportError("ViewGeoTIFF: Requires PyQt5 or PyQt4.")
     print('Using Qt ' + QT_VERSION_STR)
 
     def handleLeftClick(x, y):
@@ -218,7 +230,7 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
 
     # Create image viewer and load an image file to display.
-    viewer = QtImageViewer()
+    viewer = ViewGeoTIFF()
     viewer.loadImageFromFile()  # Pops up file dialog.
 
     # Handle left mouse clicks with custom slot.

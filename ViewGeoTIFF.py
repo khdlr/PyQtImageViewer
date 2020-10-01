@@ -46,8 +46,9 @@ class ViewGeoTIFF(QGraphicsView):
     leftMouseButtonDoubleClicked = pyqtSignal(float, float)
     rightMouseButtonDoubleClicked = pyqtSignal(float, float)
 
-    def __init__(self):
+    def __init__(self, app):
         QGraphicsView.__init__(self)
+        self.app = app
 
         # Image is displayed as a QPixmap in a QGraphicsScene attached to this QGraphicsView.
         self.scene = QGraphicsScene()
@@ -209,6 +210,10 @@ class ViewGeoTIFF(QGraphicsView):
             self.rightMouseButtonDoubleClicked.emit(scenePos.x(), scenePos.y())
         QGraphicsView.mouseDoubleClickEvent(self, event)
 
+    def closeEvent(self, event):
+        self.app.quit()
+
+
 
 if __name__ == '__main__':
     import sys
@@ -230,7 +235,7 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
 
     # Create image viewer and load an image file to display.
-    viewer = ViewGeoTIFF()
+    viewer = ViewGeoTIFF(app)
     viewer.loadImageFromFile()  # Pops up file dialog.
 
     # Handle left mouse clicks with custom slot.
